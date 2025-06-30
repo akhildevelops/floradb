@@ -1,11 +1,11 @@
 # Create schema
-schema=Schema(documents=Text())\
+`schema=Schema(documents=Text())`
 
 # Create table based on Schema
-table=db.create(schema)\
+`table=db.create(schema)`
 
 # Insert data into table
-table[documents].insert(["record"])\
+`table[documents].insert(["record"])`
 
 # Get count vectors of each record
-table[documents.count_vector()].get()\
+`table[documents.count_vector()].get()`
