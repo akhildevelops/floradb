@@ -12,7 +12,7 @@ use nom::{
 
 #[derive(Debug, PartialEq)]
 pub struct Call<'q> {
-    pub identifier: &'q str,
+    pub identifier: Box<Expression<'q>>,
     pub args: Vec<Expression<'q>>,
     pub kwargs: Vec<&'q str>, // Simplified
 }
@@ -20,7 +20,7 @@ pub struct Call<'q> {
 #[derive(Debug, PartialEq)]
 pub struct Attribute<'q> {
     pub prefix: Box<Expression<'q>>,
-    pub suffix: Box<Expression<'q>>,
+    pub suffix: &'q str,
 }
 
 #[derive(Debug, PartialEq)]
@@ -35,6 +35,7 @@ pub enum Expression<'q> {
     Attribute(Attribute<'q>),
     Identifier(&'q str),
     Subscript(Subscript<'q>),
+    Constant(Constant<'q>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,9 +54,14 @@ pub enum Variant<'q> {
 pub struct Root<'q> {
     pub body: Vec<Variant<'q>>,
 }
-
+#[derive(Debug, PartialEq)]
+pub enum Constant<'q> {
+    String(&'q str),
+    Number(u32),
+}
 #[cfg(test)]
 mod test {
+    use core::num;
     use std::os::unix::process::parent_id;
 
     use nom::{
@@ -131,9 +137,27 @@ mod test {
         }
     }
 
-    // Address below patterns
-    // A(hello=kir)
-    // A(hello=kir(),bir)
+    fn get_string<'q>(input: &'q str) -> IResult<&'q str, &'q str> {
+        delimited(char('"'), take_until("\""), char('"')).parse(input)
+    }
+    fn get_number(input: &str) -> IResult<&str, u32> {
+        let n = input.parse().map_err(|_| {
+            nom::Err::Error(nom::error::Error::from_error_kind(input, ErrorKind::Digit))
+        })?;
+        Ok(("", n))
+    }
+    fn get_constant<'q>(input: &'q str) -> IResult<&'q str, Constant<'q>> {
+        if let Ok((remaining, input)) = get_string(input) {
+            Ok((remaining, Constant::String(input)))
+        } else if let Ok((remainig, number)) = get_number(input) {
+            Ok((remainig, Constant::Number(number)))
+        } else {
+            Err(nom::Err::Error(nom::error::Error::from_error_kind(
+                input,
+                ErrorKind::Alpha,
+            )))
+        }
+    }
     fn get_pair_braces<'q>(
         input: &'q str,
         start_brace: char,
@@ -154,12 +178,13 @@ mod test {
         Ok((remaining, (func_name, args)))
     }
     fn get_call<'q>(input: &'q str) -> IResult<&'q str, Call<'q>> {
-        let (remaining, (func_name, args)) = get_pair_braces(input, '(', ')')?;
+        let (remaining, (func, args)) = get_pair_braces(input, '(', ')')?;
+        let (_, func_name) = get_expression(func)?;
         let (_, (args, kwargs)) = get_args(args)?;
         Ok((
             remaining,
             Call {
-                identifier: func_name,
+                identifier: Box::new(func_name),
                 args,
                 kwargs,
             },
@@ -169,14 +194,14 @@ mod test {
         let (remanining, pairs) = separated_pair(
             take_until(".").map_res(|x| get_expression(x)),
             char('.'),
-            get_expression,
+            take_while(|x: char| !x.is_alphabetic()),
         )
         .parse(input)?;
         Ok((
             remanining,
             Attribute {
                 prefix: Box::new(pairs.0.1),
-                suffix: Box::new(pairs.1),
+                suffix: pairs.1,
             },
         ))
     }
@@ -191,17 +216,21 @@ mod test {
         }
     }
     fn get_expression<'q>(input: &'q str) -> IResult<&'q str, Expression<'q>> {
-        if let Ok(x) = get_identifier(input) {
-            Ok((x.0, Expression::Identifier(x.1)))
+        if let Ok(x) = get_call(input) {
+            Ok((x.0, Expression::Call(x.1)))
         } else if let Ok(x) = get_attribute(input) {
             Ok((x.0, Expression::Attribute(x.1)))
-        } else if let Ok(x) = get_call(input) {
-            Ok((x.0, Expression::Call(x.1)))
+        } else if let Ok(x) = get_identifier(input) {
+            Ok((x.0, Expression::Identifier(x.1)))
+        } else if let Ok(x) = get_subscript(input) {
+            Ok((x.0, Expression::Subscript(x.1)))
+        } else if let Ok(x) = get_constant(input) {
+            Ok((x.0, Expression::Constant(x.1)))
         } else {
             Err(nom::Err::Error(nom::error::Error::from_error_kind(
                 input,
                 //Fixme: Proper Errors
-                ErrorKind::Alpha,
+                ErrorKind::HexDigit,
             )))
         }
     }
@@ -238,7 +267,10 @@ mod test {
         let some_str = "Schema()";
         let call = get_call(some_str).unwrap();
         assert_eq!(call.0, "");
-        assert_eq!(call.1.identifier, &some_str[..6]);
+        assert_eq!(
+            call.1.identifier,
+            Box::new(Expression::Identifier(&some_str[..6]))
+        );
         assert_eq!(call.1.args.len(), 0);
         assert_eq!(call.1.kwargs.len(), 0);
     }
@@ -247,7 +279,10 @@ mod test {
         let some_str = "Schema(image=Image())";
         let call = get_call(some_str).unwrap();
         assert_eq!(call.0, "");
-        assert_eq!(call.1.identifier, &some_str[..6]);
+        assert_eq!(
+            call.1.identifier,
+            Box::new(Expression::Identifier(&some_str[..6]))
+        );
         assert_eq!(call.1.args.len(), 1);
         assert_eq!(call.1.kwargs.len(), 1);
     }
@@ -258,13 +293,13 @@ mod test {
         assert_eq!(create_schema.0, "");
         assert_eq!(
             create_schema.1,
-            Expression::Attribute(Attribute {
-                prefix: Box::new(Expression::Identifier("db")),
-                suffix: Box::new(Expression::Call(Call {
-                    identifier: "create",
-                    args: vec![Expression::Identifier("schema")],
-                    kwargs: vec![]
-                }))
+            Expression::Call(Call {
+                identifier: Box::new(Expression::Attribute(Attribute {
+                    prefix: Box::new(Expression::Identifier("db")),
+                    suffix: ""
+                })),
+                args: vec![Expression::Identifier("schema")],
+                kwargs: vec![]
             })
         )
     }
@@ -284,7 +319,46 @@ mod test {
     #[test]
     fn test_indexing() {
         let some_str = "table[documents]";
-        get_subscript(some_str).unwrap();
+        let (remaining, subscript) = get_subscript(some_str).unwrap();
+        assert_eq!(remaining, "");
+        assert_eq!(
+            subscript.identifier,
+            Box::new(Expression::Identifier("table"))
+        );
+        assert_eq!(
+            subscript.slice,
+            Box::new(Expression::Identifier("documents"))
+        );
+    }
+    #[test]
+    fn test_string() {
+        let some_str = "\"record\"";
+        let (remining, constant) = get_constant(some_str).unwrap();
+        assert_eq!(remining, "");
+        assert_eq!(constant, Constant::String("record"));
+    }
+    #[test]
+    fn test_number() {
+        let some_str = "10";
+        let (remining, constant) = get_constant(some_str).unwrap();
+        assert_eq!(remining, "");
+        assert_eq!(constant, Constant::Number(10));
+    }
+    #[test]
+    fn test_constant_in_expression() {
+        // Call(Call { identifier: Attribute(Attribute { prefix: Subscript(Subscript { identifier: Identifier("table"), slice: Identifier("documents") }), suffix: "" }), args: [Subscript(Subscript { identifier: Identifier(""), slice: Constant(String("record")) })], kwargs: [] })
+        let some_str = "table[documents].insert([\"record\"])";
+        let (remaining, expression) = get_expression(some_str).unwrap();
+        assert_eq!(remaining, "");
+        println!("{:?}", expression);
+    }
+    #[test]
+    #[ignore]
+    fn test_call_attribute() {
+        let some_str = "table[documents.count_vector()].get()";
+        let (remianing, expression) = get_expression(some_str).unwrap();
+        assert_eq!(remianing, "");
+        println!("{:?}", expression);
     }
     #[test]
     fn test_call_args() {
