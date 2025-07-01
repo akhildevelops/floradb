@@ -1,0 +1,1 @@
+- nom parser isn't efficient as it looks. For an example for an input to be of  expression type across different enum variants. We need to check if it passes variants one by one.
