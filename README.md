@@ -9,3 +9,10 @@ It's main goals are developer's experience followed by perfomance and security.
 - [User experience](./reference/query.md)
 
 ### Project tracker: [Floradb Project Tracker](https://github.com/users/akhildevelops/projects/12)
+
+### Development
+Pre-requisite:
+- Rust (Download from https://www.rust-lang.org/tools/install)
+
+Run Tests:
+- `cargo test`
