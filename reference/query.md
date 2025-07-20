@@ -1,3 +1,4 @@
+
 # Create schema
 `schema=Schema(documents=Text())`
 
@@ -24,4 +25,17 @@ B:
 ```
 model=EmbeddingModel("all-MiniLM-L6-v2")
 table[id,model.transform(documents).as(embeddings)]
+```
+
+# Inserts:
+ ```shell
+ db.insert(docs="Hello");
+ ```
+or
+```shell
+byte_buffer = TextBuffer();
+db.insert(docs=byte_buffer);
+byte_buffer.write(b"Hello");
+byte_buffer.write(b" ");
+byte_buffer.write(b"World");
 ```
