@@ -1,0 +1,22 @@
+Flora64 will handle internal data generation 
+
+processor = Processor(lambda x: encode(x))
+table.register_processor(processor)
+table.insert({"adsf":123,"asdf":9898})
+
+or
+
+User will handle the inserts.
+table.insert({"asdf":1234,"asdf":encode(1342)}
+
+
+Select queries
+// Flora 64 will handle
+table["new"]=table["column"]+table["column"]
+
+// Bunch of data sent to complex
+table["new"]=table.map(lambda x: complex(x))
+
+// User will handle
+subset = table[:10].extract()
+table["new"].extend(complex(subset))
