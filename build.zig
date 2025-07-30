@@ -4,18 +4,19 @@ pub fn build(b: *std.Build) void {
     if (builtin.os.tag != .linux) {
         @panic("Currently flora supports only Linux based systems.");
     }
-
     // Build Parameters
     const target = b.standardTargetOptions(.{});
-
     const optimize = b.standardOptimizeOption(.{});
 
+    // Dependencies
+    const module = b.dependency("arrow_zig", .{ .target = target, .optimize = optimize }).module("arrow");
     // Library
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
+    lib_mod.addImport("arrow", module);
 
     // Executable
     const exe_mod = b.createModule(.{
