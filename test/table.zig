@@ -15,7 +15,4 @@ test {
     var table = try Table.from_schema("asdf", &schema, allocator);
     defer table.deinit();
     try table.append(.{ .weight = true, .age = false });
-    // const db = Database{ .allocator = std.testing.allocator, .name = "First" };
-
-    // try table.append();
 }
