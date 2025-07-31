@@ -7,5 +7,4 @@ const Types = @import("./types.zig");
 pub const Schema = Types.Schema;
 pub const DataType = Types.DataType;
 pub const Database = @import("./database.zig");
-pub const Column = Types.Column;
 const Arrow = @import("arrow");

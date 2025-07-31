@@ -46,10 +46,15 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     // Test Suite
-    const all_tests_module = b.createModule(.{ .root_source_file = b.path("test/all.zig"), .target = target, .optimize = optimize });
+    const all_tests_module = b.createModule(.{
+        .root_source_file = b.path("test/all.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     all_tests_module.addImport("flora64", lib_mod);
     const all_tests = b.addTest(.{ .root_module = all_tests_module });
     const all_tests_run_step = b.addRunArtifact(all_tests);
+    const intall_test = b.addInstallArtifact(all_tests, .{ .dest_sub_path = "test" });
     const lib_unit_tests = b.addTest(.{
         .root_module = lib_mod,
     });
@@ -66,4 +71,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_exe_unit_tests.step);
     test_step.dependOn(&all_tests_run_step.step);
+    test_step.dependOn(&intall_test.step);
 }
